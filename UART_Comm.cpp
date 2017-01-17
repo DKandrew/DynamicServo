@@ -15,13 +15,21 @@ using namespace std;
 
 // This function will perform a data writting/transmitting 
 int writeData(int fd, char *data, int dataLen){
+	// Enable wirte
 	digitalWrite(SWITCH, SWITCH_OFF);
 	delayMicroseconds(100);				//Need delay some time before the GPIO switch is truely turned off. 
 										//I guess 20us is the limited time (reading from oscilloscope)
 	int result = write(fd, data, dataLen);
-	delayMicroseconds(80*dataLen);		// After sending the message, need delay some time before the GPIO switch is truely turned on.
+	delayMicroseconds(50*dataLen);		// After sending the message, need delay some time before the GPIO switch is truely turned on.
 										//I guess 400us is the limited time for transimitting 5 bytes (by tried and error)
+	// Disable wirte
 	digitalWrite(SWITCH, SWITCH_ON);
+	
+	// Read 
+	delayMicroseconds(2000);	
+	char receivedData[6];
+	int len = read(fd, (void*)receivedData, 6);
+	delay(1);
 	return result;
 }
 
@@ -73,7 +81,7 @@ int uartSerialSetup(char* device, int baud){
 			options.c_cflag = B115200 | CS8 | CLOCAL | CREAD;		
 			break;
 		case 1000000:
-			options.c_cflag = B1000000 | CS8 | CLOCAL | CREAD | ~PARENB;		
+			options.c_cflag = B1000000 | CS8 | CLOCAL | CREAD;		
 			break;
 		default:
 			options.c_cflag = B115200 | CS8 | CLOCAL | CREAD;		
@@ -96,9 +104,15 @@ int main(){
 	// Note: wiringPi does not support 1M Baud Rate, so I have to re-write a serialSetup function by myself.
 	//		 Following the code in http://www.raspberry-projects.com/pi/programming-in-c/uart-serial-port/using-the-uart
 	// 		 Now this "uartSerialSetup" can support 1M Baud Rate, it is also capable of setting up more custormized specification such as parity. 
+	
+	
 	int baud = 1000000;	//baud rate
 	int fd = uartSerialSetup("/dev/ttyS0",baud);
+	
+	
+	
 	/*
+	int baud = 115200;
 	int fd = serialOpen("/dev/ttyS0",baud);
 	if(( fd < 0 )){
 		std::cout << "Open file failed" << std::endl;
@@ -113,9 +127,17 @@ int main(){
 	
 	// UART test
 	while(1){
+		/*
+		char data_2config[8] = {0xFF, 0xFF, 0x01, 0x04, 0x02, 0x2B, 0x01, 0xCC};
+		writeData(fd, data_2config, 8);
+		delay(1);
+		*/
+		
 		
 		char data_2config[6] = {0xFF, 0xFF, 0x01, 0x02, 0x01, 0xFB};
 		writeData(fd, data_2config, 6);
 		delay(1);
+		
+		
 	}
 }
