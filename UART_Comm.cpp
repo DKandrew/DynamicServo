@@ -125,6 +125,8 @@
 
 using namespace std;
 
+int modeFlag = 0; 		// if modeFlag == 0, it is in Wheel mode; if modeFlag == 1 it is in Joint mode
+
 
 void printData(char data[], int len){
 	for(int i=0; i<len; i++){
@@ -146,19 +148,6 @@ int writeData(int fd, char *data, int dataLen){
 	return result;
 }
 
-void setPosition(int fd, int id, int position){
-	//position = position % 1024;		// The range of AX servo position is from 0 (0x0) to 1024(0x3ff). 
-	int posi_l = position & 0xff;	// Lower 8 bits of position 
-	int posi_h = position >> 8;		// Upper 8 bits of position 
-	int len = 5;					// Data length is 5
-	int checksum = ~(id + len + AX_WRITE_DATA + AX_GOAL_POSITION_L + posi_l + posi_h) & 0xff; // First NOT the sum, then truncate it to 1 bytes, i.e. AND 0xFF
-	int dataLen = 9; 		// Data length is 9 = len + 4. 4 represnets FF FF id len
-	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_GOAL_POSITION_L, posi_l, posi_h, checksum};
-	writeData(fd, data, dataLen);
-
-}
-
-
 // Wheel Mode is the mode where servo can have torque control
 void setToWheelMode(int fd, int id){
 	int len = 7;					// Data length is 5
@@ -166,6 +155,7 @@ void setToWheelMode(int fd, int id){
 	int dataLen = len + 4;			// 4 represnets the length of FF FF id len
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_CW_ANGLE_LIMIT_L, 0, 0, 0, 0, checksum};
 	writeData(fd, data, dataLen);
+	modeFlag = 0;		// Update modeFlag
 	
 	//For Debugging
 	//printf("Checksum: %d \n", checksum);
@@ -191,12 +181,56 @@ void setToJointMode(int fd, int id, int cwLimit, int ccwLimit){
 	int dataLen = len + 4;			// 4 represnets the length of FF FF id len
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_CW_ANGLE_LIMIT_L, cwLimit_l, cwLimit_h, ccwLimit_l, ccwLimit_h, checksum};
 	writeData(fd, data, dataLen);
+	modeFlag = 1;		// Update modeFlag
 	
 	//For Debugging
 	//printf("Checksum: %d, cw: %d, ccw: %d\n", checksum, cwLimit, ccwLimit);
 	//printData(data, dataLen);
 	return ;
 }
+
+void setPosition(int fd, int id, int position){
+	//position = position % 1024;		// The range of AX servo position is from 0 (0x0) to 1023(0x3ff). 
+	int posi_l = position & 0xff;	// Lower 8 bits of position 
+	int posi_h = position >> 8;		// Upper 8 bits of position 
+	int len = 5;					// Data length is 5
+	int checksum = ~(id + len + AX_WRITE_DATA + AX_GOAL_POSITION_L + posi_l + posi_h) & 0xff; // First NOT the sum, then truncate it to 1 bytes, i.e. AND 0xFF
+	int dataLen = 9; 		// Data length is 9 = len + 4. 4 represnets FF FF id len
+	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_GOAL_POSITION_L, posi_l, posi_h, checksum};
+	writeData(fd, data, dataLen);
+
+}
+
+// This function will set the torque servo produces, i.e. Torque control
+void setTorqueLimit(int fd, int id, int torque){
+	//torque = torque % 1024;					// The range of torque is from 0 (0x0) to 1023(0x3ff). 
+	int torque_limit_l = torque & 0xff;		// Lower 8 bits of torque limit
+	int torque_limit_h = torque >> 8;		// Upper 8 bits of torque limit
+	int len = 5;
+	int checksum = ~(id + len + AX_WRITE_DATA + AX_TORQUE_LIMIT_L + torque_limit_l + torque_limit_h) & 0xff;
+	int dataLen = 9; 		// Data length is 9 = len + 4. 4 represnets FF FF id len
+	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_TORQUE_LIMIT_L, torque_limit_l, torque_limit_h, checksum};
+	writeData(fd, data, dataLen);
+	
+}
+
+/*	This function will set the moving speed of the servo. Speed in Wheel mode and Joint mode are different
+ * 	In the Joint mode, the range of speed is from 0~1023(0x3ff). The unit is about 0.111 rpm. At 1023, the (max) speed is 114 rpm
+ * 	In the Wheel mode, the range of speed is from 0~2047(0x7ff). Range 0~1023 is rotating in CCW directions; Range 1024~2047 is rotating in CW directions; 
+ */
+void setMovingSpeed(int fd, int id, int speed){
+	if(modeFlag == 0) speed %= 2048;		// If in wheel mode, speed limit is 2047.
+	if(modeFlag == 1) speed %= 1024;		// If in wheel mode, speed limit is 1023.
+	
+	int moving_speed_l = speed & 0xff; 		// Lower 8 bits of moving speed
+	int moving_speed_h = speed >> 8;		// Upper 8 bits of moving speed
+	int len = 5;
+	int checksum = ~(id + len + AX_WRITE_DATA + AX_MOVE_SPEED_L + moving_speed_l + moving_speed_h) & 0xff;
+	int dataLen = 9; 			// Data length is 9 = len + 4. 4 represnets FF FF id len
+	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_MOVE_SPEED_L, moving_speed_l, moving_speed_h, checksum};
+	writeData(fd, data, dataLen);
+}
+
 
 void test1(int fd, int posi){
 	//posi = (posi + 1023)%1024;
@@ -251,13 +285,16 @@ int main(){
 	char data_2config[6] = {0xFF, 0xFF, 0x01, 0x02, 0x01, 0xFB};
 	
 	int posi = 0;
-	
+				
 	
 	while(1){
-		posi = (posi + 20) % 560;
-		setToWheelMode(fd, 1);
+		posi = (posi + 100) % 1023;
+		//setToWheelMode(fd, 1);
 		//setToJointMode(fd, 1, 30, 512);
 		//setPosition(fd, 1, posi);
+		//setTorqueLimit(fd, 1, posi);			//Note: speed and torque control are independent to each other
+		//setMovingSpeed(fd, 1, 1024);
+		Need to implement setMaxTorque func
 		
 		// Read Status Packet 
 		int fa=0; 				//Flags for detecting FF signal
@@ -283,7 +320,7 @@ int main(){
 			}
 			printf("\n");
 		}
-		delay(500);
+		delay(1000);
 	}
 	serialClose(fd);
 }
