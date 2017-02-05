@@ -136,6 +136,10 @@ void printData(char data[], int len){
 	printf("\n");
 }
 
+/*	This function will write data into the dynamicxel servo. 
+ * 	There are some delay after the swtich is turned on and when write() is called.
+ * 	The time is manually picked. The delay time after write() cannot be zero otherwise we fail to read status packet from servo.
+ */
 int writeData(int fd, char *data, int dataLen){
 	// Enable wirte
 	digitalWrite(SWITCH, SWITCH_ON);
@@ -148,37 +152,6 @@ int writeData(int fd, char *data, int dataLen){
 	
 	return result;
 }
-
-/*
-vector<char> readData(int fd, int len){
-	// Read Status Packet 
-	int fa=0; 				//Flags for detecting FF signal
-	char temp[1];
-	
-	read(fd, (void*)temp, 1);
-	if(temp[0] == 0xFF){
-		fa = 1;
-	}
-	
-	if(fa){
-		int i = 0;
-		int dataLen = len - 1;
-		char data[dataLen];
-		read(fd, (void*)data, dataLen);
-		
-		printf("0xff detected, next: ");
-		i = 0;
-		while(i<dataLen){
-			printf("%x ", data[i]);
-			i++;
-		}
-		printf("\n");
-		return string(data);
-	}
-	return vector;
-}
-*/
-
 
 /* This function will read the data from servo into buffer. Because it uses the first 0xff in the status packet, 
  * The returned buffer will only the rest of the information (i.e. ignored the first 0xff)
@@ -217,18 +190,14 @@ void readData(int fd, char* buffer, int len){
 }
 
 
-/*
- 	int len = ;
-	int checksum = ~() &  0xff;
-	int dataLen = len + 4;
-	char data[dataLen] = {};
-	writeData(fd, data, dataLen);
-*/
+//--------------------Read from Servo--------------------
 
-//-----------------------------------------------
+/*	This is a general read function. 
+ *	The instrution is the starting address of the register user wants to read
+ */
 int readRegister(int fd, int id, int inst){
 	int rpl = 0;	// Read Parameter Length
-	switch inst:
+	switch (inst){
 		case AX_MODEL_NUMBER_L: rpl = 2; break;
 		case AX_VERSION: rpl = 1; break;
 		case AX_ID: rpl = 1; break;
@@ -262,6 +231,7 @@ int readRegister(int fd, int id, int inst){
 		case AX_LOCK: rpl = 1; break;
 		case AX_PUNCH_L: rpl = 2; break;
 		default: break;	
+	}
 	
 	// Write data 
 	int len = 4;
@@ -295,89 +265,132 @@ int readRegister(int fd, int id, int inst){
 	return result;
 }
 
-
-
-// Read model number
+// All the read functions that can be called by user
 int readModelNumber(int fd, int id){
-	int len = 4;
-	int checksum = ~(id + len + AX_READ_DATA + AX_MODEL_NUMBER_L + 2) & 0xff;	// Read 2 bytes from address AX_MODEL_NUMBER_L
-	int dataLen = len + 4;
-	char data[dataLen] = {0xFF, 0XFF, id, len, AX_READ_DATA, AX_MODEL_NUMBER_L, 2, checksum};
-	writeData(fd, data, dataLen);
-	
-	// Read data
-	char* buffer = new char[dataLen];	
-	readData(fd, buffer, dataLen);		// Buffer will be update to ff 1 4 0 c 0 ee. The first ff in the status packet is ignored. 
-	int result = 0;						
-	if(*buffer == 0xff){
-		int lowbyte = buffer[4];
-		int highbyte = buffer[5]; 
-		result = highbyte << 8 | lowbyte;
-	}else{
-		printf("Fail to read model number.\n");
-	}
-	
-	// Delete buffer
-	delete [] buffer; 
-	
-	// Return result
-	return result;
+	return readRegister(fd, id, AX_MODEL_NUMBER_L);
 }
 
 int readID(int fd, int id){
-	int len = 4;
-	int rpl = 1;	// Read Parameter Length
-	int checksum = ~(id + len + AX_READ_DATA + AX_ID + rpl) &  0xff;
-	int dataLen = len + 4;
-	char data[dataLen] = {0xFF, 0XFF, id, len, AX_READ_DATA, AX_ID, rpl, checksum};
-	writeData(fd, data, dataLen);
-	
-	// Read data
-	int readLen = 6 + rpl;		// Status packet will return "FF FF ID LEN ERROR [rpl] CHECKSUM, so readlen should be 6 bytes (everything except parameters) + rpl
-	char* buffer = new char[readLen];	
-	readData(fd, buffer, readLen);		 
-	int result = 0;						
-	if(*buffer == 0xff){
-		int index = 4; 		// Skip 0xff, id, len, error in status packet which is 4 bytes in total.
-		result = buffer[index];
-	}else{
-		printf("Fail to read ID.\n");
-	}
-	
-	// Delete buffer
-	delete [] buffer; 
-	
-	// Return result
-	return result;
+	return readRegister(fd, id, AX_ID);
 }
 
 int readBaudRate(int fd, int id){
-	int len = 4;
-	int rpl = 1;	// Read Parameter Length
-	int checksum = ~(id + len + AX_READ_DATA + AX_BAUD_RATE + rpl) &  0xff;
-	int dataLen = len + 4;
-	char data[dataLen] = {0xFF, 0XFF, id, len, AX_READ_DATA, AX_BAUD_RATE, rpl, checksum};
-	writeData(fd, data, dataLen);
-	
-	// Read data
-	int readLen = 6 + rpl;		// Status packet will return "FF FF ID LEN ERROR [rpl] CHECKSUM, so readlen should be 6 bytes (everything except parameters) + rpl
-	char* buffer = new char[readLen];	
-	readData(fd, buffer, readLen);		 
-	int result = 0;						
-	if(*buffer == 0xff){
-		int index = 4; 		// Skip 0xff, id, len, error in status packet which is 4 bytes in total.
-		result = buffer[index];
-	}else{
-		printf("Fail to read baud rate.\n");
-	}
-	
-	// Delete buffer
-	delete [] buffer; 
-	
-	// Return result
-	return result;
+	return readRegister(fd, id, AX_BAUD_RATE);
 }
 
+int readReturnDelayTime(int fd, int id){
+	return readRegister(fd, id, AX_RETURN_DELAY_TIME);
+}
+
+int readCWAngleLimit(int fd, int id){
+	return readRegister(fd, id, AX_CW_ANGLE_LIMIT_L);
+}
+
+int readCCWAngleLimit(int fd, int id){
+	return readRegister(fd, id, AX_CCW_ANGLE_LIMIT_L);
+}
+
+int readHighestLimitTemperature(int fd, int id){
+	return readRegister(fd, id, AX_HIGHEST_LIMIT_TEMPERATURE);
+}
+
+int readLowestLimitVoltage(int fd, int id){
+	return readRegister(fd, id, AX_LOWEST_LIMIT_VOLTAGE);
+}
+
+int readHighestLimitVoltage(int fd, int id){
+	return readRegister(fd, id, AX_HIGHEST_LIMIT_VOLTAGE);
+}
+
+int readMaxTorque(int fd, int id){
+	return readRegister(fd, id, AX_MAX_TORQUE_L);
+}
+
+int readStatusReturnLevel(int fd, int id){
+	return readRegister(fd, id, AX_RETURN_LEVEL);
+}
+
+int readAlarmLED(int fd, int id){
+	return readRegister(fd, id, AX_ALARM_LED);
+}
+
+int readAlarmShutdown(int fd, int id){
+	return readRegister(fd, id, AX_ALARM_SHUTDOWN);
+}
+
+int readTorqueEnable(int fd, int id){
+	return readRegister(fd, id, AX_TORQUE_ENABLE);
+}
+
+int readLED(int fd, int id){
+	return readRegister(fd, id, AX_LED_ENABLE);
+}
+
+int readCWComplianceMargin(int fd, int id){
+	return readRegister(fd, id, AX_CW_COMPLIANCE_MARGIN);
+}
+
+int readCCWComplianceMargin(int fd, int id){
+	return readRegister(fd, id, AX_CCW_COMPLIANCE_MARGIN);
+}
+
+int readCWComplianceSlope(int fd, int id){
+	return readRegister(fd, id, AX_CW_COMPLIANCE_SLOPE);
+}
+
+int readCCWComplianceSlope(int fd, int id){
+	return readRegister(fd, id, AX_CCW_COMPLIANCE_SLOPE);
+}
+
+int readGoalPosition(int fd, int id){
+	return readRegister(fd, id, AX_GOAL_POSITION_L);
+}
+
+int readMovingSpeed(int fd, int id){
+	return readRegister(fd, id, AX_MOVE_SPEED_L);
+}
+
+int readTorqueLimit(int fd, int id){
+	return readRegister(fd, id, AX_TORQUE_LIMIT_L);
+}
+
+int readPresentPosition(int fd, int id){
+	return readRegister(fd, id, AX_PRESENT_POSITION_L);
+}
+
+int readPresentSpeed(int fd, int id){
+	return readRegister(fd, id, AX_PRESENT_SPEED_L);
+}
+
+int readPresentLoad(int fd, int id){
+	return readRegister(fd, id, AX_PRESENT_LOAD_L);
+}
+
+int readPresentVoltage(int fd, int id){
+	return readRegister(fd, id, AX_PRESENT_VOLTAGE);
+}
+
+int readPresentTemperature(int fd, int id){
+	return readRegister(fd, id, AX_PRESENT_TEMPERATURE);
+}
+
+int readIfRegistered(int fd, int id){
+	return readRegister(fd, id, AX_REGISTERED_INSTRUCTION);
+}
+
+int readIfMoving(int fd, int id){
+	return readRegister(fd, id, AX_MOVING);
+}
+
+int readLock(int fd, int id){
+	return readRegister(fd, id, AX_LOCK);
+}
+
+int readPunch(int fd, int id){
+	return readRegister(fd, id, AX_PUNCH_L);
+}
+
+//--------------------write to Servo--------------------
 
 // Wheel Mode is the mode where servo can have torque control
 void setToWheelMode(int fd, int id){
@@ -473,44 +486,6 @@ void setMaxTorque(int fd, int id, int torque){
 }
 
 
-void test1(int fd, int posi){
-	//posi = (posi + 1023)%1024;
-		if(posi == 0) posi = 1023;
-		else posi = 0;
-		setPosition(fd, 1, posi);
-		
-		// Read Status Packet 
-		int fa=0; 				//Flags for detecting FF signal
-		char temp[1];
-		read(fd, (void*)temp, 1);
-		if(temp[0] == 0xFF){
-			fa = 1;
-		}
-		if(fa){
-			int i = 0;
-			int dataLen = 5;
-			char data[dataLen];
-			while(i<dataLen){
-				read(fd, (void*)temp, 1);
-				data[i] = temp[0];
-				i++;
-			}
-			printf("0xff detected, next: ");
-			i = 0;
-			while(i<dataLen){
-				printf("%x ", data[i]);
-				i++;
-			}
-			printf("\n");
-		}
-
-		delay(1000);
-		
-}
-
-
-
-
 
 //To compile: g++ UART_Comm.cpp -o uart -lwiringPi 
 int main(){
@@ -543,9 +518,9 @@ int main(){
 		//setMovingSpeed(fd, 1, 1024);
 		//Need to implement setMaxTorque func
 		
-		//int result = readModelNumber(fd, 1);
+		int result = readModelNumber(fd, 1);
 		//int result = readID(fd, 1);
-		int result = readBaudRate(fd, 1);
+		//int result = readBaudRate(fd, 1);
 		printf("Result: %d\n", result);
 		
 
@@ -554,48 +529,3 @@ int main(){
 	
 	serialClose(fd);
 }
-
-
-
-
-/*
-int dataLen = 6;
-		
-		// Enable wirte
-		digitalWrite(SWITCH, SWITCH_ON);
-		delayMicroseconds(100);			//Delay
-		
-		writeData(fd, data_2config, 6);	//Write
-		delayMicroseconds(100);			//Delay
-		
-		// Disable wirte
-		digitalWrite(SWITCH, SWITCH_OFF);
-		
-		// Read Status Packet 
-		int fa=0; 				//Flags for detecting FF signal
-		char temp[1];
-		read(fd, (void*)temp, 1);
-		if(temp[0] == 0xFF){
-			fa = 1;
-		}
-		if(fa){
-			int i = 0;
-			int dataLen = 5;
-			char data[dataLen];
-			while(i<dataLen){
-				read(fd, (void*)temp, 1);
-				data[i] = temp[0];
-				i++;
-			}
-			printf("0xff detected, next: ");
-			i = 0;
-			while(i<dataLen){
-				printf("%x ", data[i]);
-				i++;
-			}
-			printf("\n");
-		}
-
-		delay(1);
-		* 
-*/
