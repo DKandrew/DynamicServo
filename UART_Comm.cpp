@@ -146,7 +146,7 @@ int writeData(int fd, char *data, int dataLen){
 	delayMicroseconds(100);			//Delay
 	
 	int result = write(fd, data, dataLen);	//Write
-	delayMicroseconds(80);			//Delay	
+	delayMicroseconds(100);			//Delay	
 	// Disable wirte
 	digitalWrite(SWITCH, SWITCH_OFF);
 	
@@ -199,37 +199,37 @@ int readRegister(int fd, int id, int inst){
 	int rpl = 0;	// Read Parameter Length
 	switch (inst){
 		case AX_MODEL_NUMBER_L: rpl = 2; break;
-		case AX_VERSION: rpl = 1; break;
-		case AX_ID: rpl = 1; break;
-		case AX_BAUD_RATE: rpl = 1; break;
-		case AX_RETURN_DELAY_TIME: rpl = 1; break;
-		case AX_CW_ANGLE_LIMIT_L: rpl = 2; break;
-		case AX_CCW_ANGLE_LIMIT_L: rpl = 2; break;
-		case AX_HIGHEST_LIMIT_TEMPERATURE: rpl = 1; break;
-		case AX_LOWEST_LIMIT_VOLTAGE: rpl = 1; break;
-		case AX_HIGHEST_LIMIT_VOLTAGE: rpl = 1; break;
-		case AX_MAX_TORQUE_L: rpl = 2; break;
-		case AX_RETURN_LEVEL: rpl = 1; break;
-		case AX_ALARM_LED: rpl = 1; break;
+		case AX_VERSION: 		rpl = 1; break;
+		case AX_ID: 			rpl = 1; break;
+		case AX_BAUD_RATE: 		rpl = 1; break;
+		case AX_RETURN_DELAY_TIME: 	rpl = 1; break;
+		case AX_CW_ANGLE_LIMIT_L: 	rpl = 2; break;
+		case AX_CCW_ANGLE_LIMIT_L: 	rpl = 2; break;
+		case AX_HIGHEST_LIMIT_TEMPERATURE: 	rpl = 1; break;
+		case AX_LOWEST_LIMIT_VOLTAGE: 		rpl = 1; break;
+		case AX_HIGHEST_LIMIT_VOLTAGE: 		rpl = 1; break;
+		case AX_MAX_TORQUE_L: 	rpl = 2; break;
+		case AX_RETURN_LEVEL: 	rpl = 1; break;
+		case AX_ALARM_LED: 		rpl = 1; break;
 		case AX_ALARM_SHUTDOWN: rpl = 1; break;
-		case AX_TORQUE_ENABLE: rpl = 1; break;
-		case AX_LED_ENABLE: rpl = 1; break;
-		case AX_CW_COMPLIANCE_MARGIN: rpl = 1; break;
-		case AX_CCW_COMPLIANCE_MARGIN: rpl = 1; break;
-		case AX_CW_COMPLIANCE_SLOPE: rpl = 1; break;
-		case AX_CCW_COMPLIANCE_SLOPE: rpl = 1; break;
-		case AX_GOAL_POSITION_L: rpl = 2; break;
-		case AX_MOVE_SPEED_L: rpl = 2; break;
-		case AX_TORQUE_LIMIT_L: rpl = 2; break;
+		case AX_TORQUE_ENABLE: 	rpl = 1; break;
+		case AX_LED_ENABLE: 	rpl = 1; break;
+		case AX_CW_COMPLIANCE_MARGIN: 	rpl = 1; break;
+		case AX_CCW_COMPLIANCE_MARGIN: 	rpl = 1; break;
+		case AX_CW_COMPLIANCE_SLOPE: 	rpl = 1; break;
+		case AX_CCW_COMPLIANCE_SLOPE: 	rpl = 1; break;
+		case AX_GOAL_POSITION_L: 	rpl = 2; break;
+		case AX_MOVE_SPEED_L: 		rpl = 2; break;
+		case AX_TORQUE_LIMIT_L: 	rpl = 2; break;
 		case AX_PRESENT_POSITION_L: rpl = 2; break;
-		case AX_PRESENT_SPEED_L: rpl = 2; break;
-		case AX_PRESENT_LOAD_L: rpl = 2; break;
-		case AX_PRESENT_VOLTAGE: rpl = 1; break;
-		case AX_PRESENT_TEMPERATURE: rpl = 1; break;
+		case AX_PRESENT_SPEED_L: 	rpl = 2; break;
+		case AX_PRESENT_LOAD_L: 	rpl = 2; break;
+		case AX_PRESENT_VOLTAGE: 	rpl = 1; break;
+		case AX_PRESENT_TEMPERATURE: 	rpl = 1; break;
 		case AX_REGISTERED_INSTRUCTION: rpl = 1; break;
-		case AX_MOVING: rpl = 1; break;
-		case AX_LOCK: rpl = 1; break;
-		case AX_PUNCH_L: rpl = 2; break;
+		case AX_MOVING: 	rpl = 1; break;
+		case AX_LOCK: 		rpl = 1; break;
+		case AX_PUNCH_L: 	rpl = 2; break;
 		default: break;	
 	}
 	
@@ -255,7 +255,7 @@ int readRegister(int fd, int id, int inst){
 			result = buffer[index];
 		}
 	}else{
-		printf("Fail to read baud rate.\n");
+		printf("Fail to read register.\n");
 	}
 	
 	// Delete buffer
@@ -390,7 +390,50 @@ int readPunch(int fd, int id){
 	return readRegister(fd, id, AX_PUNCH_L);
 }
 
+int readAll(int fd, int id){
+	printf("readTorqueEnable: %x\n", readTorqueEnable(fd, id));
+	//printf("readAlarmLED: %x\n", readAlarmLED(fd, id));
+	//printf("readAlarmShutdown: %x\n", readAlarmShutdown(fd, id));
+	printf("readMovingSpeed: %x\n", readMovingSpeed(fd, id));
+	printf("readPresentSpeed: %x\n", readPresentSpeed(fd, id));
+	printf("readTorqueLimit: %x\n", readTorqueLimit(fd, id));
+	
+	
+	/*
+	printf("readCWAngleLimit: %d\n", readCWAngleLimit(fd, id));
+	printf("readCCWAngleLimit: %d\n", readCCWAngleLimit(fd, id));
+	printf("readHighestLimitTemperature: %d\n", readHighestLimitTemperature(fd, id));
+	printf("readMaxTorque: %d\n", readMaxTorque(fd, id));
+	printf("readAlarmLED: %d\n", readAlarmLED(fd, id));
+	printf("readAlarmShutdown: %d\n", readAlarmShutdown(fd, id));
+	printf("readTorqueEnable: %d\n", readTorqueEnable(fd, id));
+	printf("readLED: %d\n", readLED(fd, id));
+	printf("readGoalPosition: %d\n", readGoalPosition(fd, id));
+	printf("readMovingSpeed: %d\n", readMovingSpeed(fd, id));
+	printf("readPresentPosition: %d\n", readPresentPosition(fd, id));
+	printf("readPresentSpeed: %d\n", readPresentSpeed(fd, id));
+	printf("readPresentLoad: %d\n", readPresentLoad(fd, id));
+	printf("readPresentVoltage: %d\n", readPresentVoltage(fd, id));
+	printf("readPresentTemperature: %d\n", readPresentTemperature(fd, id));
+	printf("readIfRegistered: %d\n", readIfRegistered(fd, id));
+	printf("readIfMoving: %d\n", readIfMoving(fd, id));
+	printf("readLock: %d\n", readLock(fd, id));
+	printf("readPunch: %d\n", readPunch(fd, id));
+	*/
+	//printf(": %d\n", (fd, id));
+	
+}
+
 //--------------------write to Servo--------------------
+
+// Torque enable: enable == 1, Torque disable enable == 0
+void torqueEnable(int fd, int id, int enable){
+	int len = 4;
+	int checksum = ~(id + len + AX_WRITE_DATA + AX_TORQUE_ENABLE + enable) & 0xff;
+	int dataLen = len + 4;
+	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_TORQUE_ENABLE, enable, checksum};
+	writeData(fd, data, dataLen);
+}
 
 // Wheel Mode is the mode where servo can have torque control
 void setToWheelMode(int fd, int id){
@@ -399,8 +442,9 @@ void setToWheelMode(int fd, int id){
 	int dataLen = len + 4;			// 4 represnets the length of FF FF id len
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_CW_ANGLE_LIMIT_L, 0, 0, 0, 0, checksum};
 	writeData(fd, data, dataLen);
+	//torqueEnable(fd, id, 1);
 	modeFlag = 0;		// Update modeFlag
-	
+
 	//For Debugging
 	//printf("Checksum: %d \n", checksum);
 	//printData(data, dataLen);
@@ -503,13 +547,17 @@ int main(){
 	char data_2config[6] = {0xFF, 0xFF, 0x01, 0x02, 0x01, 0xFB};
 	
 	int posi = 0;
+	int id = 1;
+	setToWheelMode(fd, 1);
+	setTorqueLimit(fd, 1, 1023);
+	//setMovingSpeed(fd, 1, 500);
+	
 	//setToJointMode(fd, 1, 0, 1023);
-	//setTorqueLimit(fd, 1, 1023);
-	//setMovingSpeed(fd, 1, 1023);
+
 				
 	
 	while(1){
-		posi = (posi + 10) % 1024;
+		//posi = (posi + 10) % 1024;
 		//setToWheelMode(fd, 1);
 		//setToJointMode(fd, 1, 0, 1023);
 		//setPosition(fd, 1, posi);
@@ -518,13 +566,42 @@ int main(){
 		//setMovingSpeed(fd, 1, 1024);
 		//Need to implement setMaxTorque func
 		
-		int result = readModelNumber(fd, 1);
+		//int result = readModelNumber(fd, 1);
 		//int result = readID(fd, 1);
 		//int result = readBaudRate(fd, 1);
-		printf("Result: %d\n", result);
+		//printf("Result: %d\n", result);
 		
-
-		delay(200);
+		printf("------------------------------\n");
+		readMaxTorque(fd, id);
+		readTorqueLimit(fd, id);
+/*		
+		// Read Status Packet 
+ 		int fa=0; 				//Flags for detecting FF signal
+ 		char temp[1];
+ 		read(fd, (void*)temp, 1);
+ 		if(temp[0] == 0xFF){
+ 			fa = 1;
+ 		}
+ 		if(fa){
+ 			int i = 0;
+ 			int dataLen = 5;
+ 			char data[dataLen];
+ 			while(i<dataLen){
+ 				read(fd, (void*)temp, 1);
+ 				data[i] = temp[0];
+ 				i++;
+ 			}
+ 			printf("0xff detected, next: ");
+ 			i = 0;
+ 			while(i<dataLen){
+ 				printf("%x ", data[i]);
+ 				i++;
+ 			}
+ 			printf("\n");
+ 		}
+		
+*/		
+		delay(1000);
 	}
 	
 	serialClose(fd);
