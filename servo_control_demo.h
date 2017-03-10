@@ -152,3 +152,5 @@ void setMaxTorque(int fd, int id, int torque);
 int readPresentPosition(int fd, int id);
 
 void servoControl(int fd, int id, int CW_limit, int CCW_limit, int step_len, int speed);
+
+void setReturnDelayTime(int fd, int id, int dalay_time)；
