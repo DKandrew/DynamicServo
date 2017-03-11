@@ -24,40 +24,62 @@ int writeData(int fd, char *data, int dataLen){
 	// Enable wirte
 	digitalWrite(SWITCH, SWITCH_ON);
 	delayMicroseconds(100);			//Delay
+	ssize_t result = -1;
+	while(result == -1){
+		result = write(fd, data, dataLen);	//Write
+	}
 	
-	int result = write(fd, data, dataLen);	//Write
-	// For 1M Baud rate, sending 1 bytes is about 0.01ms. But considering the digitalWrite may run faster than write(), we set delay = 10*datalen
-	delayMicroseconds(5 * dataLen);				
+	// For 1M Baud rate, sending 1 byte is about 0.01ms. But considering the digitalWrite may run faster than write(), we set delay = 10*datalen
+	delayMicroseconds(10 * dataLen);				
 	// Disable wirte
 	digitalWrite(SWITCH, SWITCH_OFF);
 	
-	return result;
+	return 0;
 }
 
 /* This function will read the data from servo into buffer. Because it uses the first 0xff in the status packet, 
  * The returned buffer will only the rest of the information (i.e. ignored the first 0xff)
  * buffer is pre-allocated. User should use delete [] after calling this function. len is the total length of the buffer. 
  */
-void readData(int fd, char* buffer, int len){
+int readData(int fd, char* buffer, int len){
 
 	int reading_len = len - 1; 
-	read(fd, (void*)buffer, reading_len);
+	//cout << reading_len << endl;
+	int test;
+	int result = read(fd, (void*)buffer, reading_len);
+	buffer[len - 1] = '\0';
+	//cout << "result in readData: " << result << endl;
+	return result;
+	/*
+	for(int i = 0; i < reading_len; i++){
+		printf("%x ", buffer[i]);
+	}
+	cout << endl;
+	cin >> test;
+	//if(test == 1) return;
 	while(buffer[0] != 0xFF || buffer[1] != 0xFF){
-		read(fd, (void*)buffer, reading_len);
+		//cout << "PASS" << endl;
+		
+		cout << read(fd, (void*)buffer, reading_len) << endl;
+		for(int i = 0; i < reading_len; i++){
+			printf("%x ", buffer[i]);
+		}
+		cout << endl;
+		cin >> test;
 	}
 
 	if(DEBUG == 1){
 		printf("0xff, oxff detected, next: ");
-		i = 0;
-		while(i<dataLen){
-			printf("%x ", buffer[i+2]);
+		int i = 0;
+		while(i < reading_len){
+			printf("%x ", buffer[i]);
 			i++;
 		}
 		printf("\n");
 	}
 
 	// Add '\0' at the last byte of buffer
-	buffer[len - 1] = '\0';
+	buffer[len - 1] = '\0';*/
 
 /*
 	// Read Status Packet 
@@ -137,16 +159,16 @@ int readRegister(int fd, int id, int inst){
 	int len = 4;
 	int checksum = ~(id + len + AX_READ_DATA + inst + rpl) &  0xff;
 	int dataLen = len + 4;
-	char data[dataLen] = {0xFF, 0XFF, id, len, AX_READ_DATA, inst, rpl, checksum};
-	writeData(fd, data, dataLen);
-	
-	// Read Delay
-	delayMicroseconds(READ_DELAY_TIME);	//---Maybe we don't need this.
-	
-	// Read data
 	int readLen = 7 + rpl;		// Status packet will return "FF FF ID LEN ERROR [rpl] CHECKSUM \0" (\0 means the end of a string), so readlen should be 6 bytes (everything except parameters) + rpl
-	char* buffer = new char[readLen];	
-	readData(fd, buffer, readLen);		 
+	char* buffer = new char[readLen];
+	char data[dataLen] = {0xFF, 0XFF, id, len, AX_READ_DATA, inst, rpl, checksum};
+	int suc = 0;
+	while(suc != readLen-1 || buffer[0]!=0xff || buffer[1]!=0xff){		//Check if the readData return the correct length.
+		writeData(fd, data, dataLen);
+		delay(10);
+		suc = readData(fd, buffer, readLen);		 
+	}
+	//cout << "SUCCESS----------SUCCESS" << endl;
 	int result = 0;						
 	if(*buffer == 0xff){
 		int index = 5; 			// Skip id, len, error in status packet which is 4 bytes in total.
@@ -296,6 +318,8 @@ void servoControl(int fd, int id, int CW_limit, int CCW_limit, int step_len, int
 	expect = target;
 }
 
+
+// To complie: g++ servo_control_demo.cpp -o test -lwiringPi
 int main(){
 	int baud = 1000000;				//wiringPi does not support 1M baud rate originally. You have to add this into the source code "wiringSerial.h" and re-build the wiringPi.
 	int fd = serialOpen("/dev/ttyS0",baud);		
@@ -303,12 +327,33 @@ int main(){
 		std::cout << "Open file failed" << std::endl;
 		return 0;
 	}
+	fcntl(fd, F_SETFL, FNDELAY);
+	
 	//Initialize GPIO switch
+	
 	wiringPiSetup();
 	pinMode(SWITCH, OUTPUT);
 	digitalWrite(SWITCH, SWITCH_ON);
 
 	char data_2config[6] = {0xFF, 0xFF, 0x01, 0x02, 0x01, 0xFB};
+/*	
+	int posi = 0;
+	while(1){
+		/*
+		cout << "Sending Data" << endl;
+		writeData(fd, data_2config, 6);
+		cout << endl;
+		delay(1);
+		
+		cout << "Read Position: " << endl;
+		//cin >> posi;
+		cout << readPresentPosition(fd, 1) << endl;;
+		//sleep(100);
+	}
+	return 0;
+}
+*/
+	
 	
 	int posi = 0;
 	int id = 1;
@@ -363,3 +408,4 @@ int main(){
 	}
 	return 0;
 }
+

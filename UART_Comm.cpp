@@ -128,6 +128,9 @@ using namespace std;
 
 int modeFlag = 0; 		// if modeFlag == 0, it is in Wheel mode; if modeFlag == 1 it is in Joint mode
 int DEBUG = 1;			// Debug flag
+int READ_DELAY_TIME = 200;	// By default, the servo delay 0.5 msec to send the status packet after it receives inst packet. 
+							// But the acutal delay time can be modified if you changed the Return Delay Time register
+							// 100 is picked by experiment. 50 will fail. 
 
 void printData(char data[], int len){
 	for(int i=0; i<len; i++){
@@ -160,32 +163,35 @@ int writeData(int fd, char *data, int dataLen){
 void readData(int fd, char* buffer, int len){
 	// Read Status Packet 
 	int fa=0; 				//Flags for detecting FF signal
-	char temp[1];
+	char temp[2];
 	
 	// Read the first byte and check if it is 0xFF
-	read(fd, (void*)temp, 1);
-	if(temp[0] == 0xFF){
+	read(fd, (void*)temp, 2);
+	if(temp[0] == 0xFF && temp[1] == 0xFF){
 		fa = 1;
 	}
 	
 	if(fa){
+		buffer[0] = temp[0];
+		buffer[1] = temp[1];
+		
 		int i = 0;
-		int dataLen = len - 1;	
-		read(fd, (void*)buffer, dataLen);
+		int dataLen = len - 3;
+		read(fd, (void*)(buffer + 2), dataLen);
 		
 		//Debug
 		if(DEBUG == 1){
-			printf("0xff detected, next: ");
+			printf("0xff, oxff detected, next: ");
 			i = 0;
 			while(i<dataLen){
-				printf("%x ", buffer[i]);
+				printf("%x ", buffer[i+2]);
 				i++;
 			}
 			printf("\n");
 		}
 		
 		// Add '\0' at the last byte of buffer
-		buffer[dataLen] = '\0';
+		buffer[len - 1] = '\0';
 	}
 }
 
@@ -240,16 +246,19 @@ int readRegister(int fd, int id, int inst){
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_READ_DATA, inst, rpl, checksum};
 	writeData(fd, data, dataLen);
 	
+	// Read Delay
+	delayMicroseconds(READ_DELAY_TIME);	
+	
 	// Read data
-	int readLen = 6 + rpl;		// Status packet will return "FF FF ID LEN ERROR [rpl] CHECKSUM, so readlen should be 6 bytes (everything except parameters) + rpl
+	int readLen = 7 + rpl;		// Status packet will return "FF FF ID LEN ERROR [rpl] CHECKSUM \0" (\0 means the end of a string), so readlen should be 6 bytes (everything except parameters) + rpl
 	char* buffer = new char[readLen];	
 	readData(fd, buffer, readLen);		 
 	int result = 0;						
 	if(*buffer == 0xff){
-		int index = 4; 		// Skip 0xff, id, len, error in status packet which is 4 bytes in total.
+		int index = 5; 		// Skip id, len, error in status packet which is 4 bytes in total.
 		if (rpl > 1){
-			int lowbyte = buffer[4];
-			int highbyte = buffer[5]; 
+			int lowbyte = buffer[index];
+			int highbyte = buffer[index + 1]; 
 			result = highbyte << 8 | lowbyte;
 		}else {
 			result = buffer[index];
@@ -390,13 +399,19 @@ int readPunch(int fd, int id){
 	return readRegister(fd, id, AX_PUNCH_L);
 }
 
-int readAll(int fd, int id){
+int readall(int fd, int id){
+	printf("-------------------------\n");
 	printf("readTorqueEnable: %x\n", readTorqueEnable(fd, id));
+	printf("readPresentLoad: %x\n", readPresentLoad(fd, id));
+	//printf("readTorqueLimit: %x\n", readTorqueLimit(fd, id));
+	//printf("readMaxTorque: %x\n", readMaxTorque(fd, id));
+	
+	
 	//printf("readAlarmLED: %x\n", readAlarmLED(fd, id));
 	//printf("readAlarmShutdown: %x\n", readAlarmShutdown(fd, id));
-	printf("readMovingSpeed: %x\n", readMovingSpeed(fd, id));
-	printf("readPresentSpeed: %x\n", readPresentSpeed(fd, id));
-	printf("readTorqueLimit: %x\n", readTorqueLimit(fd, id));
+	//printf("readMovingSpeed: %x\n", readMovingSpeed(fd, id));
+	
+
 	
 	
 	/*
@@ -529,8 +544,6 @@ void setMaxTorque(int fd, int id, int torque){
 	writeData(fd, data, dataLen); 
 }
 
-
-
 //To compile: g++ UART_Comm.cpp -o uart -lwiringPi 
 int main(){
 	int baud = 1000000;				//wiringPi does not support 1M baud rate originally. You have to add this into the source code "wiringSerial.h" and re-build the wiringPi.
@@ -549,59 +562,61 @@ int main(){
 	int posi = 0;
 	int id = 1;
 	setToWheelMode(fd, 1);
-	setTorqueLimit(fd, 1, 1023);
+	
 	//setMovingSpeed(fd, 1, 500);
 	
 	//setToJointMode(fd, 1, 0, 1023);
-
-				
-	
-	while(1){
-		//posi = (posi + 10) % 1024;
-		//setToWheelMode(fd, 1);
-		//setToJointMode(fd, 1, 0, 1023);
-		//setPosition(fd, 1, posi);
-		//printf("Current posi: %d\n", posi);
-		//setTorqueLimit(fd, 1, posi);			//Note: speed and torque control are independent to each other
-		//setMovingSpeed(fd, 1, 1024);
-		//Need to implement setMaxTorque func
-		
-		//int result = readModelNumber(fd, 1);
-		//int result = readID(fd, 1);
-		//int result = readBaudRate(fd, 1);
-		//printf("Result: %d\n", result);
-		
-		printf("------------------------------\n");
-		readMaxTorque(fd, id);
-		readTorqueLimit(fd, id);
-/*		
-		// Read Status Packet 
- 		int fa=0; 				//Flags for detecting FF signal
- 		char temp[1];
- 		read(fd, (void*)temp, 1);
- 		if(temp[0] == 0xFF){
- 			fa = 1;
- 		}
- 		if(fa){
- 			int i = 0;
- 			int dataLen = 5;
- 			char data[dataLen];
- 			while(i<dataLen){
- 				read(fd, (void*)temp, 1);
- 				data[i] = temp[0];
- 				i++;
- 			}
- 			printf("0xff detected, next: ");
- 			i = 0;
- 			while(i<dataLen){
- 				printf("%x ", data[i]);
- 				i++;
- 			}
- 			printf("\n");
- 		}
-		
-*/		
+	/*
+	int loop = 0;
+	int loopLimit = 6; 
+	while(loop < loopLimit){
+		readall(fd, id);
 		delay(1000);
+		loop++;
+	}
+	*/
+
+	while(1){
+		int tql; 	// Torque Limit
+		cout << "Torque limit (-1 for exit): ";
+		cin >> tql;
+		tql = tql % 1024;
+		setTorqueLimit(fd, 1, tql);
+		
+		if(tql == -1){
+			break;
+		}
+		
+		int rev;
+		cout << "Reverse or not (1 = yes, 0 = no): ";
+		cin >> rev;
+
+		if(rev){
+			setMovingSpeed(fd, 1, 1023 + 1024);
+			
+			int loop = 0;
+			int loopLimit = 5; 
+			while(loop < loopLimit){
+				readall(fd, id);
+				delay(1000);
+				loop++;
+			}
+		}
+		else{
+			setMovingSpeed(fd, 1, 1023);
+			
+			int loop = 0;
+			int loopLimit = 25; 
+			while(loop < loopLimit){
+				readall(fd, id);
+				delay(1000);
+				loop++;
+			}	
+			//delay(25000);
+		}
+		setMovingSpeed(fd, 1, 0);	
+		setTorqueLimit(fd, 1, tql);
+		cout << "Over" << endl;
 	}
 	
 	serialClose(fd);

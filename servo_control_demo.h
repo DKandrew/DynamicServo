@@ -131,7 +131,7 @@ void printData(char data[], int len);
 
 int writeData(int fd, char *data, int dataLen);
 
-void readData(int fd, char* buffer, int len);
+int readData(int fd, char* buffer, int len);
 
 int readRegister(int fd, int id, int inst);
 
@@ -153,4 +153,5 @@ int readPresentPosition(int fd, int id);
 
 void servoControl(int fd, int id, int CW_limit, int CCW_limit, int step_len, int speed);
 
-void setReturnDelayTime(int fd, int id, int dalay_time)；
+void setReturnDelayTime(int fd, int id, int dalay_time);
+
