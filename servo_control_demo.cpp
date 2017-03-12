@@ -176,11 +176,13 @@ int readRegister(int fd, int id, int inst){
 	char* buffer = new char[readLen];
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_READ_DATA, inst, rpl, checksum};
 	int suc = 0;
+
 	while(suc != readLen-1 || buffer[0]!=0xff || buffer[1]!=0xff){		//Check if the readData return the correct length.
 		
 		writeData(fd, data, dataLen);
 		delay(100);
 		suc = readData(fd, buffer, readLen);	
+		/*
 		cout <<	"Here" << endl; 
 		if(DEBUG == 1){
 			int i = 0;
@@ -192,9 +194,8 @@ int readRegister(int fd, int id, int inst){
 			cout << suc << endl;
 			//nt test;
 			//cin >> test;
-		}
+		}*/
 	}
-	//cout << "SUCCESS----------SUCCESS" << endl;
 	int result = 0;						
 	if(*buffer == 0xff){
 		int index = 5; 			// Skip id, len, error in status packet which is 4 bytes in total.
@@ -231,9 +232,10 @@ int readStatusPacket(int fd){
 	while(read_len < len-1){
 		read_len = read_len + readData(fd, response+read_len, len-read_len);
 	}
+	/*
 	cout<< "Status Packet: read_len=" << read_len;
 	printData(response, len);
-
+*/
 	int retval = 0;
 	retval = response[4];
 	// Delete response
@@ -395,55 +397,75 @@ int main(){
 	digitalWrite(SWITCH, SWITCH_ON);
 
 	char data_2config[6] = {0xFF, 0xFF, 0x01, 0x02, 0x01, 0xFB};
-
-
-	
-/*	
-	int posi = 0;
-	while(1){
-		/*
-		cout << "Sending Data" << endl;
-		writeData(fd, data_2config, 6);
-		cout << endl;
-		delay(1);
-		
-		cout << "Read Position: " << endl;
-		//cin >> posi;
-		cout << readPresentPosition(fd, 1) << endl;;
-		//sleep(100);
-	}
-	return 0;
-}
-*/
-	
 	
 	int posi = 0;
 	int id = 1;
 	
 	setReturnDelayTime(fd, id, 100);
 
-	int CW_limit, CCW_limit, step_len, speed;
+	int step_len, speed;
 	int low_limit, hi_limit;
-	do{
+	int do_exit = 0;
+	int do_convert = 0;
+	
+	int singleAng = 1024/300;			// convert from degree to the servo unit.
+	int delay_time_per_step = 0;
+	
+	cout << "Please input the delay time per step(in ms): ";
+	cin >> delay_time_per_step;
+	
+	while(!do_exit){
 		cout << "Please input the lowest limit of the servo(from 0 to 300 degree): ";
 		cin >> low_limit;
 		cout << "Please input the highest limit of the servo(from 0 to 300 degree): ";
 		cin >> hi_limit;
-	}while(low_limit >= hi_limit);
-	int singleAng = 1024/300;
-	low_limit = (int)(low_limit * singleAng);
-	hi_limit = (int)(hi_limit * singleAng);
-	int isSame = 0;
+		
+		low_limit = (int)(low_limit * singleAng);
+		hi_limit = (int)(hi_limit * singleAng);
+		cout << "low_limit is " << low_limit << ", hi_limit is " << hi_limit << endl;
+		
+		if(low_limit > hi_limit) do_convert = 1;	// Find the direction the motor should move;
+		else do_convert = 0;
+		
+		//Initializing
+		cout << "Initialize to the low limit.........." << endl;
+		if(do_convert) setToJointMode(fd, id, hi_limit, low_limit);
+		else setToJointMode(fd, id, low_limit, hi_limit);
+		setPosition(fd, id, low_limit);
+		setMovingSpeed(fd, id, 100);
+		
+		cout << "Finish initialize." << endl;
+		
+		currPos = low_limit;
+		cout << "Please input the step length you want(in degree): ";
+		cin >> step_len;
+		step_len *= singleAng;
+		cout << "Please input the speed you want: ";
+		cin >> speed;
+		
+		int target = 0;
+		
+		while(1){
+			if(!do_convert){
+				target = currPos + step_len;
+				if(target > hi_limit) target = hi_limit;
+			}
+			else{
+				target = currPos - step_len;
+				if(target < hi_limit) target = hi_limit;
+			}
+			setPosition(fd, id, target);
+			currPos = target;
+			delay(delay_time_per_step);
+			if(!do_convert && currPos >= hi_limit) break;
+			else if(do_convert && currPos <= hi_limit) break;
+		}
+		cout << "Finish task. Shall we exit?(1 to exit, 0 to continue): ";
+		cin >> do_exit;
+		cout << endl;
+	}
 	
-	cout << "low_limit is " << low_limit << ", hi_limit is " << hi_limit << endl;
-	cout << "Initialize to the low limit.........." << endl;
-	setToJointMode(fd, id, low_limit, hi_limit);
-	setPosition(fd, id, low_limit);
-	setMovingSpeed(fd, id, 100);
-	cout << "Finish initialize." << endl;
-	expect = low_limit;
-	
-	delay(100);
+/*
 	while(1){
 		int isContinue = 1;
 		if(!isSame){
@@ -470,7 +492,27 @@ int main(){
 			cin >> isSame;
 		}
 		cout << "-----------------------------------------------------------------------------------" << endl;
-	}
+	}*/
+	serialClose(fd);
 	return 0;
 }
 
+
+
+/*	
+	int posi = 0;
+	while(1){
+		/*
+		cout << "Sending Data" << endl;
+		writeData(fd, data_2config, 6);
+		cout << endl;
+		delay(1);
+		
+		cout << "Read Position: " << endl;
+		//cin >> posi;
+		cout << readPresentPosition(fd, 1) << endl;;
+		//sleep(100);
+	}
+	return 0;
+}
+*/
