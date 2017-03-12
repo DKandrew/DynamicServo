@@ -1,7 +1,7 @@
 #include "servo_control_demo.h"
 
-int modeFlag = 0; 		// if modeFlag == 0, it is in Wheel mode; if modeFlag == 1 it is in Joint mode
-int DEBUG = 1;			// Debug flag
+int modeFlag = 0; 			// if modeFlag == 0, it is in Wheel mode; if modeFlag == 1 it is in Joint mode
+int DEBUG = 1;				// Debug flag
 int READ_DELAY_TIME = 200;	// By default, the servo delay 0.5 msec to send the status packet after it receives inst packet. 
 							// But the acutal delay time can be modified if you changed the Return Delay Time register
 							// 100 is picked by experiment. 50 will fail.
@@ -43,7 +43,7 @@ int writeData(int fd, char *data, int dataLen){
 	}
 	
 	// For 1M Baud rate, sending 1 byte is about 0.01ms. But considering the digitalWrite may run faster than write(), we set delay = 10*datalen
-	delayMicroseconds(100);				
+	delayMicroseconds(100);			// The delay timing is picked by experiment... 		
 	// Disable wirte
 	digitalWrite(SWITCH, SWITCH_OFF);
 	
@@ -56,12 +56,11 @@ int writeData(int fd, char *data, int dataLen){
  */
 int readData(int fd, char* buffer, int len){
 
-	int reading_len = len - 1; 
-	//cout << reading_len << endl;
+	int reading_len = len - 1; 		// The last byte of buffer is reserved for '\0'
 	int test;
 	int result = read(fd, (void*)buffer, reading_len);
 	buffer[len - 1] = '\0';
-	//cout << "result in readData: " << result << endl;
+	
 	return result;
 	/*
 	for(int i = 0; i < reading_len; i++){
@@ -175,27 +174,16 @@ int readRegister(int fd, int id, int inst){
 	int readLen = 7 + rpl;		// Status packet will return "FF FF ID LEN ERROR [rpl] CHECKSUM \0" (\0 means the end of a string), so readlen should be 6 bytes (everything except parameters) + rpl
 	char* buffer = new char[readLen];
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_READ_DATA, inst, rpl, checksum};
-	int suc = 0;
 
+	int suc = 0;				// Keep track of how many data we successfully read in one read(). It is used because read() sometime fails to read the packet at one time. It needs read() twice. 
 	while(suc != readLen-1 || buffer[0]!=0xff || buffer[1]!=0xff){		//Check if the readData return the correct length.
-		
+
 		writeData(fd, data, dataLen);
-		delay(100);
+		delay(100);				// When finish writeData() we need delay because the computer's speed is way faster than the servo. If there is no delay, we may just read a bunch of 0s. The delay time 100 here is picked by experiment.
 		suc = readData(fd, buffer, readLen);	
-		/*
-		cout <<	"Here" << endl; 
-		if(DEBUG == 1){
-			int i = 0;
-			while(i < readLen - 1){
-				printf("%x ", buffer[i]);
-				i++;
-			}
-			printf("\n");
-			cout << suc << endl;
-			//nt test;
-			//cin >> test;
-		}*/
 	}
+
+	// Find the result in the buffer
 	int result = 0;						
 	if(*buffer == 0xff){
 		int index = 5; 			// Skip id, len, error in status packet which is 4 bytes in total.
@@ -208,7 +196,7 @@ int readRegister(int fd, int id, int inst){
 		}
 		isFail = 0;
 	}else{
-		isFail = 1;		//printf("Fail to read register.\n");
+		isFail = 1;				//printf("Fail to read register.\n");
 	}
 	
 	// Delete buffer
@@ -220,6 +208,9 @@ int readRegister(int fd, int id, int inst){
 
 /*
  * Read the status packet after setting functions. The status packet is always 0xff 0xff 0x1 0x2 ERROR Checksum
+ * Return the ERROR information
+ * Note:	We think you have to read the status packet every time you send a instruction packet. 
+ * 			Otherwise, the status packet will remain on the bus and corrupte the future reading.
  */
 int readStatusPacket(int fd){
 	int len = 7;
@@ -232,10 +223,8 @@ int readStatusPacket(int fd){
 	while(read_len < len-1){
 		read_len = read_len + readData(fd, response+read_len, len-read_len);
 	}
-	/*
-	cout<< "Status Packet: read_len=" << read_len;
-	printData(response, len);
-*/
+	
+
 	int retval = 0;
 	retval = response[4];
 	// Delete response
@@ -245,6 +234,7 @@ int readStatusPacket(int fd){
 }
 
 //-----------------------------------Setting Function-----------------------------------
+// Enable the torque. In the wheel mode however, the torque enable register will be automatically set to 1.
 void torqueEnable(int fd, int id, int enable){
 	int len = 4;
 	int checksum = ~(id + len + AX_WRITE_DATA + AX_TORQUE_ENABLE + enable) & 0xff;
@@ -263,13 +253,10 @@ void setToWheelMode(int fd, int id){
 	int dataLen = len + 4;			// 4 represnets the length of FF FF id len
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_CW_ANGLE_LIMIT_L, 0, 0, 0, 0, checksum};
 	writeData(fd, data, dataLen);
+	// Read Status Packet
 	int return_error = readStatusPacket(fd);
-	//torqueEnable(fd, id, 1);
-	modeFlag = 0;		// Update modeFlag
 
-	//For Debugging
-	//printf("Checksum: %d \n", checksum);
-	//printData(data, dataLen);
+	modeFlag = 0;		// Update modeFlag
 }
 
 
@@ -291,12 +278,9 @@ void setToJointMode(int fd, int id, int cwLimit, int ccwLimit){
 	int dataLen = len + 4;			// 4 represnets the length of FF FF id len
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_CW_ANGLE_LIMIT_L, cwLimit_l, cwLimit_h, ccwLimit_l, ccwLimit_h, checksum};
 	writeData(fd, data, dataLen);
+	// Read Status Packet
 	int return_error = readStatusPacket(fd);
 	modeFlag = 1;		// Update modeFlag
-	
-	//For Debugging
-	//printf("Checksum: %d, cw: %d, ccw: %d\n", checksum, cwLimit, ccwLimit);
-	//printData(data, dataLen);
 	return ;
 }
 
@@ -306,9 +290,10 @@ void setPosition(int fd, int id, int position){
 	int posi_h = position >> 8;		// Upper 8 bits of position 
 	int len = 5;					// Data length is 5
 	int checksum = ~(id + len + AX_WRITE_DATA + AX_GOAL_POSITION_L + posi_l + posi_h) & 0xff; // First NOT the sum, then truncate it to 1 bytes, i.e. AND 0xFF
-	int dataLen = 9; 		// Data length is 9 = len + 4. 4 represnets FF FF id len
+	int dataLen = 9; 				// Data length is 9 = len + 4. 4 represnets FF FF id len
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_GOAL_POSITION_L, posi_l, posi_h, checksum};
 	writeData(fd, data, dataLen);
+	// Read Status Packet
 	int return_error = readStatusPacket(fd);
 
 }
@@ -320,9 +305,10 @@ void setTorqueLimit(int fd, int id, int torque){
 	int torque_limit_h = torque >> 8;		// Upper 8 bits of torque limit
 	int len = 5;
 	int checksum = ~(id + len + AX_WRITE_DATA + AX_TORQUE_LIMIT_L + torque_limit_l + torque_limit_h) & 0xff;
-	int dataLen = 9; 		// Data length is 9 = len + 4. 4 represnets FF FF id len
+	int dataLen = 9; 						// Data length is 9 = len + 4. 4 represnets FF FF id len
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_TORQUE_LIMIT_L, torque_limit_l, torque_limit_h, checksum};
 	writeData(fd, data, dataLen);
+	// Read Status Packet
 	int return_error = readStatusPacket(fd);
 }
 
@@ -338,9 +324,10 @@ void setMovingSpeed(int fd, int id, int speed){
 	int moving_speed_h = speed >> 8;		// Upper 8 bits of moving speed
 	int len = 5;
 	int checksum = ~(id + len + AX_WRITE_DATA + AX_MOVE_SPEED_L + moving_speed_l + moving_speed_h) & 0xff;
-	int dataLen = 9; 			// Data length is 9 = len + 4. 4 represnets FF FF id len
+	int dataLen = 9; 						// Data length is 9 = len + 4. 4 represnets FF FF id len
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_MOVE_SPEED_L, moving_speed_l, moving_speed_h, checksum};
 	writeData(fd, data, dataLen);
+	// Read Status Packet
 	int return_error = readStatusPacket(fd);
 }
 
@@ -352,6 +339,7 @@ void setMaxTorque(int fd, int id, int torque){
 	int dataLen = len + 4; 		
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_MAX_TORQUE_L, torque_limit_l, torque_limit_h, checksum};
 	writeData(fd, data, dataLen); 
+	// Read Status Packet
 	int return_error = readStatusPacket(fd);
 }
 
@@ -361,6 +349,7 @@ void setReturnDelayTime(int fd, int id, int dalay_time){
 	int dataLen = len + 4;
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_RETURN_DELAY_TIME, dalay_time, checksum};
 	writeData(fd, data, dataLen);
+	// Read Status Packet
 	int return_error = readStatusPacket(fd);
 }
 
@@ -380,7 +369,7 @@ void servoControl(int fd, int id, int CW_limit, int CCW_limit, int step_len, int
 	expect = target;
 }
 
-
+//-----------------------------------Main-----------------------------------
 // To complie: g++ servo_control_demo.cpp -o test -lwiringPi
 int main(){
 	int baud = 1000000;				//wiringPi does not support 1M baud rate originally. You have to add this into the source code "wiringSerial.h" and re-build the wiringPi.
@@ -389,19 +378,17 @@ int main(){
 		std::cout << "Open file failed" << std::endl;
 		return 0;
 	}
-	//fcntl(fd, F_SETFL, FNDELAY);
 	
 	//Initialize GPIO switch
 	wiringPiSetup();
 	pinMode(SWITCH, OUTPUT);
 	digitalWrite(SWITCH, SWITCH_ON);
 
-	char data_2config[6] = {0xFF, 0xFF, 0x01, 0x02, 0x01, 0xFB};
+	char ping[6] = {0xFF, 0xFF, 0x01, 0x02, 0x01, 0xFB};		// A ping instrcution packet. Use to check if servo response. The servo should return 0xFF, 0xFF, 0x01, 0x02, 0x00, 0xFC
 	
+	//---Variable---
 	int posi = 0;
 	int id = 1;
-	
-	setReturnDelayTime(fd, id, 100);
 
 	int step_len, speed;
 	int low_limit, hi_limit;
@@ -410,11 +397,15 @@ int main(){
 	
 	int singleAng = 1024/300;			// convert from degree to the servo unit.
 	int delay_time_per_step = 0;
+
+	// Set the servo return delay time	
+	setReturnDelayTime(fd, id, 100);
 	
 	cout << "Please input the delay time per step(in ms): ";
 	cin >> delay_time_per_step;
 	
 	while(!do_exit){
+		// When low_limit < hi_limit, the servo will rotate in the opposite direction 
 		cout << "Please input the lowest limit of the servo(from 0 to 300 degree): ";
 		cin >> low_limit;
 		cout << "Please input the highest limit of the servo(from 0 to 300 degree): ";
@@ -429,13 +420,18 @@ int main(){
 		
 		//Initializing
 		cout << "Initialize to the low limit.........." << endl;
-		if(do_convert) setToJointMode(fd, id, hi_limit, low_limit);
-		else setToJointMode(fd, id, low_limit, hi_limit);
+		if(do_convert){
+			setToJointMode(fd, id, hi_limit, low_limit);
+		}
+		else{
+			setToJointMode(fd, id, low_limit, hi_limit);
+		}
 		setPosition(fd, id, low_limit);
 		setMovingSpeed(fd, id, 100);
 		
 		cout << "Finish initialize." << endl;
 		
+		// Get step length and speed
 		currPos = low_limit;
 		cout << "Please input the step length you want(in degree): ";
 		cin >> step_len;
@@ -443,7 +439,7 @@ int main(){
 		cout << "Please input the speed you want: ";
 		cin >> speed;
 		
-		int target = 0;
+		int target = 0;		// The goal position
 		
 		while(1){
 			if(!do_convert){
@@ -465,6 +461,10 @@ int main(){
 		cout << endl;
 	}
 	
+	serialClose(fd);
+	return 0;
+}
+
 /*
 	while(1){
 		int isContinue = 1;
@@ -492,12 +492,8 @@ int main(){
 			cin >> isSame;
 		}
 		cout << "-----------------------------------------------------------------------------------" << endl;
-	}*/
-	serialClose(fd);
-	return 0;
-}
-
-
+	}
+*/
 
 /*	
 	int posi = 0;
