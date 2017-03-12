@@ -9,11 +9,24 @@ int currPos = 0;
 int isFail = 0;
 int expect = 0;
 
-void printData(char data[], int len){
+void printData(char *data, int len){
 	for(int i=0; i<len; i++){
 		printf("%x ", data[i]);
 	}
 	printf("\n");
+}
+
+/*
+ * Check if the data is a valid. Return -1 if the data is invalid like checksum error or no 0xff, or the length is 
+ * Else, return the position where the data starts.
+ */
+int checkDataIntegrity(char *data, int len){
+	// Find 0xFF 0xFF
+	
+	// Find the length of the data
+	
+	// Check checksum
+	return -1;
 }
 
 /*	This function will write data into the dynamicxel servo. 
@@ -30,7 +43,7 @@ int writeData(int fd, char *data, int dataLen){
 	}
 	
 	// For 1M Baud rate, sending 1 byte is about 0.01ms. But considering the digitalWrite may run faster than write(), we set delay = 10*datalen
-	delayMicroseconds(10 * dataLen);				
+	delayMicroseconds(100);				
 	// Disable wirte
 	digitalWrite(SWITCH, SWITCH_OFF);
 	
@@ -164,9 +177,22 @@ int readRegister(int fd, int id, int inst){
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_READ_DATA, inst, rpl, checksum};
 	int suc = 0;
 	while(suc != readLen-1 || buffer[0]!=0xff || buffer[1]!=0xff){		//Check if the readData return the correct length.
+		
 		writeData(fd, data, dataLen);
-		delay(10);
-		suc = readData(fd, buffer, readLen);		 
+		delay(100);
+		suc = readData(fd, buffer, readLen);	
+		cout <<	"Here" << endl; 
+		if(DEBUG == 1){
+			int i = 0;
+			while(i < readLen - 1){
+				printf("%x ", buffer[i]);
+				i++;
+			}
+			printf("\n");
+			cout << suc << endl;
+			//nt test;
+			//cin >> test;
+		}
 	}
 	//cout << "SUCCESS----------SUCCESS" << endl;
 	int result = 0;						
@@ -191,6 +217,31 @@ int readRegister(int fd, int id, int inst){
 	return result;
 }
 
+/*
+ * Read the status packet after setting functions. The status packet is always 0xff 0xff 0x1 0x2 ERROR Checksum
+ */
+int readStatusPacket(int fd){
+	int len = 7;
+	char *response = new char[len];
+	int read_len = readData(fd, response, len);	// Because readData() may not read a full length of data at once. For example 
+												// we should expect status packet 0xff 0xff 0x1 0x2 Error Checksum. But the first readData() only read the first 4 bytes 0xff 0xff 0x1 0x2. 
+												// We find that the remaining 2 bytes is being read in the next readData(). Therefore, we do readData() twice here in order to read a full length of data. 
+												// Failing to read a full length of data will corrupt all the future readData() because it will contain data from previous status packet. 
+	
+	while(read_len < len-1){
+		read_len = read_len + readData(fd, response+read_len, len-read_len);
+	}
+	cout<< "Status Packet: read_len=" << read_len;
+	printData(response, len);
+
+	int retval = 0;
+	retval = response[4];
+	// Delete response
+	delete [] response;
+	
+	return retval;
+}
+
 //-----------------------------------Setting Function-----------------------------------
 void torqueEnable(int fd, int id, int enable){
 	int len = 4;
@@ -198,6 +249,9 @@ void torqueEnable(int fd, int id, int enable){
 	int dataLen = len + 4;
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_TORQUE_ENABLE, enable, checksum};
 	writeData(fd, data, dataLen);
+	// Read Status Packet
+	int return_error = readStatusPacket(fd);
+	
 }
 
 // Wheel Mode is the mode where servo can have torque control
@@ -207,6 +261,7 @@ void setToWheelMode(int fd, int id){
 	int dataLen = len + 4;			// 4 represnets the length of FF FF id len
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_CW_ANGLE_LIMIT_L, 0, 0, 0, 0, checksum};
 	writeData(fd, data, dataLen);
+	int return_error = readStatusPacket(fd);
 	//torqueEnable(fd, id, 1);
 	modeFlag = 0;		// Update modeFlag
 
@@ -234,6 +289,7 @@ void setToJointMode(int fd, int id, int cwLimit, int ccwLimit){
 	int dataLen = len + 4;			// 4 represnets the length of FF FF id len
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_CW_ANGLE_LIMIT_L, cwLimit_l, cwLimit_h, ccwLimit_l, ccwLimit_h, checksum};
 	writeData(fd, data, dataLen);
+	int return_error = readStatusPacket(fd);
 	modeFlag = 1;		// Update modeFlag
 	
 	//For Debugging
@@ -251,6 +307,7 @@ void setPosition(int fd, int id, int position){
 	int dataLen = 9; 		// Data length is 9 = len + 4. 4 represnets FF FF id len
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_GOAL_POSITION_L, posi_l, posi_h, checksum};
 	writeData(fd, data, dataLen);
+	int return_error = readStatusPacket(fd);
 
 }
 
@@ -264,7 +321,7 @@ void setTorqueLimit(int fd, int id, int torque){
 	int dataLen = 9; 		// Data length is 9 = len + 4. 4 represnets FF FF id len
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_TORQUE_LIMIT_L, torque_limit_l, torque_limit_h, checksum};
 	writeData(fd, data, dataLen);
-	
+	int return_error = readStatusPacket(fd);
 }
 
 /*	This function will set the moving speed of the servo. Speed in Wheel mode and Joint mode are different
@@ -282,6 +339,7 @@ void setMovingSpeed(int fd, int id, int speed){
 	int dataLen = 9; 			// Data length is 9 = len + 4. 4 represnets FF FF id len
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_MOVE_SPEED_L, moving_speed_l, moving_speed_h, checksum};
 	writeData(fd, data, dataLen);
+	int return_error = readStatusPacket(fd);
 }
 
 void setMaxTorque(int fd, int id, int torque){
@@ -292,6 +350,7 @@ void setMaxTorque(int fd, int id, int torque){
 	int dataLen = len + 4; 		
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_MAX_TORQUE_L, torque_limit_l, torque_limit_h, checksum};
 	writeData(fd, data, dataLen); 
+	int return_error = readStatusPacket(fd);
 }
 
 void setReturnDelayTime(int fd, int id, int dalay_time){
@@ -300,6 +359,7 @@ void setReturnDelayTime(int fd, int id, int dalay_time){
 	int dataLen = len + 4;
 	char data[dataLen] = {0xFF, 0XFF, id, len, AX_WRITE_DATA, AX_RETURN_DELAY_TIME, dalay_time, checksum};
 	writeData(fd, data, dataLen);
+	int return_error = readStatusPacket(fd);
 }
 
 //-----------------------------------Reading Function-----------------------------------
@@ -327,15 +387,17 @@ int main(){
 		std::cout << "Open file failed" << std::endl;
 		return 0;
 	}
-	fcntl(fd, F_SETFL, FNDELAY);
+	//fcntl(fd, F_SETFL, FNDELAY);
 	
 	//Initialize GPIO switch
-	
 	wiringPiSetup();
 	pinMode(SWITCH, OUTPUT);
 	digitalWrite(SWITCH, SWITCH_ON);
 
 	char data_2config[6] = {0xFF, 0xFF, 0x01, 0x02, 0x01, 0xFB};
+
+
+	
 /*	
 	int posi = 0;
 	while(1){
@@ -358,6 +420,8 @@ int main(){
 	int posi = 0;
 	int id = 1;
 	
+	setReturnDelayTime(fd, id, 100);
+
 	int CW_limit, CCW_limit, step_len, speed;
 	int low_limit, hi_limit;
 	do{
@@ -379,6 +443,7 @@ int main(){
 	cout << "Finish initialize." << endl;
 	expect = low_limit;
 	
+	delay(100);
 	while(1){
 		int isContinue = 1;
 		if(!isSame){
